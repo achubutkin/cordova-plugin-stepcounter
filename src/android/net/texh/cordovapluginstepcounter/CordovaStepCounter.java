@@ -84,14 +84,23 @@ public class CordovaStepCounter extends CordovaPlugin {
     };
 
     @Override
-    public void onStart() {
+    public void initialize(CordovaInterface cordova, CordovaWebView webView) {
+      super.initialize(cordova, webView);
+
         Activity activity = this.cordova.getActivity();
-        SharedPreferences sharedPref = activity.getSharedPreferences(USER_DATA_PREF, Context.MODE_PRIVATE);
+
+      SharedPreferences sharedPref = activity.getSharedPreferences(USER_DATA_PREF, Context.MODE_PRIVATE);
         Boolean pActive = this.getPedometerIsActive(sharedPref);
         if(pActive){
             if(stepCounterIntent == null){
+                Context context = this.cordova.getContext();
                 stepCounterIntent = new Intent(activity, StepCounterService.class);
-                activity.startService(stepCounterIntent);
+                if (Build.VERSION.SDK_INT >= 26) {
+                  context.startForegroundService(stepCounterIntent);
+                }
+                else {
+                  context.startService(stepCounterIntent);
+                }
             }
 
             if(!bound){
@@ -99,8 +108,6 @@ public class CordovaStepCounter extends CordovaPlugin {
             }
 
         }
-
-        super.onStart();
     }
 
     @Override
@@ -127,7 +134,13 @@ public class CordovaStepCounter extends CordovaPlugin {
                 Log.i(TAG, "Starting StepCounterService");
                 //Update pedometerActive preference
                 this.setPedometerIsActive(sharedPref, true);
-                activity.startService(stepCounterIntent);
+                Context context = this.cordova.getContext();
+                if (Build.VERSION.SDK_INT >= 26) {
+                  context.startForegroundService(stepCounterIntent);
+                }
+                else {
+                  context.startService(stepCounterIntent);
+                }
             }else{
                 Log.i(TAG, "StepCounterService Already Started before, just binding to it");
             }
@@ -165,11 +178,11 @@ public class CordovaStepCounter extends CordovaPlugin {
             if (bound) {
                 Log.i(TAG, "Unbinding StepCounterService");
                 activity.unbindService(mConnection);
+                bound = false;
             } else{
                 Log.i(TAG, "StepCounterService already unbinded");
             }
 
-            activity.stopService(stepCounterIntent);
             Integer currentCount = CordovaStepCounter.getTotalCount(sharedPref);
             //Callback with final count
             callbackContext.success(currentCount);

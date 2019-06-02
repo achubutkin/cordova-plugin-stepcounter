@@ -35,6 +35,7 @@
       <uses-feature android:name="android.hardware.sensor.stepcounter" />
       <uses-feature android:name="android.hardware.sensor.stepdetector" />
         <uses-permission android:name="android.permission.RECEIVE_BOOT_COMPLETED" />
+        <uses-permission android:name="android.permission.FOREGROUND_SERVICE" />
     </config-file>
 
     <config-file target="res/xml/config.xml" parent="/*">
@@ -46,6 +47,8 @@
     <source-file src="src/android/net/texh/cordovapluginstepcounter/CordovaStepCounter.java" target-dir="src/net/texh/cordovapluginstepcounter/"/>
     <source-file src="src/android/net/texh/cordovapluginstepcounter/StepCounterService.java" target-dir="src/net/texh/cordovapluginstepcounter/"/>
     <source-file src="src/android/net/texh/cordovapluginstepcounter/StepCounterBootReceiver.java" target-dir="src/net/texh/cordovapluginstepcounter/"/>
+
+    <resource-file src="src/android/res/drawable/ic_footsteps_silhouette_variant.xml" target="res/drawable/ic_footsteps_silhouette_variant.xml" />
   </platform>
 
 </plugin>

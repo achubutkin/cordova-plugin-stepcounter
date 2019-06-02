@@ -25,6 +25,9 @@ package net.texh.cordovapluginstepcounter;
  */
 
 import android.app.AlarmManager;
+import android.app.Notification;
+import android.app.NotificationChannel;
+import android.app.NotificationManager;
 import android.app.PendingIntent;
 import android.app.Service;
 import android.content.Context;
@@ -35,15 +38,21 @@ import android.hardware.SensorEvent;
 import android.hardware.SensorEventListener;
 import android.hardware.SensorManager;
 import android.os.Binder;
+import android.os.Build;
 import android.os.IBinder;
+import android.support.annotation.RequiresApi;
+import android.support.v4.app.NotificationCompat;
 import android.util.Log;
 import android.widget.Toast;
 
+import org.apache.cordova.pedometer.PedoListener;
 import org.json.JSONException;
 import org.json.JSONObject;
 
+import java.text.NumberFormat;
 import java.text.SimpleDateFormat;
 import java.util.Date;
+import java.util.Locale;
 
 import static java.lang.System.currentTimeMillis;
 
@@ -56,6 +65,12 @@ public class StepCounterService extends Service implements SensorEventListener {
     private SensorManager mSensorManager;
     private Sensor        mStepSensor;
     private Boolean       haveSetOffset   = false;
+
+    private int startsteps = 0;
+    private int currentStepsCounted = 0;
+
+    public final static int NOTIFICATION_ID = 1;
+    public final static String NOTIFICATION_CHANNEL_ID = "StepCounterServiceNotificationChannel";
 
     /*public void stopTracking() {
         Log.i(TAG, "Setting isRunning flag to false");
@@ -82,6 +97,8 @@ public class StepCounterService extends Service implements SensorEventListener {
         super.onCreate();
         Log.i(TAG, "onCreate");
         // Do some setup stuff
+
+      showNotification();
     }
 
     @Override
@@ -125,7 +142,7 @@ public class StepCounterService extends Service implements SensorEventListener {
 
         mSensorManager = (SensorManager) getSystemService(SENSOR_SERVICE);
         mStepSensor    = mSensorManager.getDefaultSensor(Sensor.TYPE_STEP_COUNTER);
-        mSensorManager.registerListener(this, mStepSensor, SensorManager.SENSOR_DELAY_NORMAL);
+        mSensorManager.registerListener(this, mStepSensor, SensorManager.SENSOR_DELAY_UI);
     }
 
     @Override
@@ -156,6 +173,15 @@ public class StepCounterService extends Service implements SensorEventListener {
 
     @Override
     public void onSensorChanged(SensorEvent sensorEvent) {
+        // Only look at step counter events
+        if (sensorEvent.sensor.getType() != Sensor.TYPE_STEP_COUNTER) {
+          return;
+        }
+
+        if (sensorEvent.values[0] > Integer.MAX_VALUE) {
+          return;
+        }
+
         //Log.i(TAG, "onSensorChanged event!");
         Integer totalSteps = 0;
         Integer steps = Math.round(sensorEvent.values[0]);
@@ -203,8 +229,17 @@ public class StepCounterService extends Service implements SensorEventListener {
 
         //Counter += 1
         Integer stepsCounted = CordovaStepCounter.getTotalCount(sharedPref);
-        stepsCounted += 1;
-        CordovaStepCounter.setTotalCount(sharedPref,stepsCounted);
+
+        if(this.startsteps == 0)
+          this.startsteps = steps - stepsCounted;
+
+        steps = steps - startsteps;
+
+        CordovaStepCounter.setTotalCount(sharedPref, steps);
+
+        currentStepsCounted = steps;
+
+        showNotification();
 
         //If offset has not been set or if saved offset is greater than today offset
         if (!haveSetOffset) {
@@ -219,7 +254,6 @@ public class StepCounterService extends Service implements SensorEventListener {
         daySteps = (steps+1) - dayOffset;
         //Log all this
         Log.i(TAG, "** daySteps :"+ daySteps+" ** stepCounted :"+stepsCounted);
-
 
         //Save calculated values to SharedPreferences
         try{
@@ -247,6 +281,56 @@ public class StepCounterService extends Service implements SensorEventListener {
 
     @Override
     public void onDestroy(){
-        Log.i(TAG, "onDestroy");
+      Log.i(TAG, "onDestroy");
+      try {
+        SensorManager sm = (SensorManager) getSystemService(SENSOR_SERVICE);
+        sm.unregisterListener(this);
+      } catch (Exception e) {
+        e.printStackTrace();
+      }
+      isRunning = false;
+    }
+
+    private void showNotification() {
+      if (Build.VERSION.SDK_INT >= 26) {
+        startForeground(NOTIFICATION_ID, getNotification(this));
+      } else {
+        ((NotificationManager) getSystemService(Context.NOTIFICATION_SERVICE))
+          .notify(NOTIFICATION_ID, getNotification(this));
+      }
+    }
+
+    private Notification getNotification(final Context context) {
+      Notification.Builder notificationBuilder =
+        Build.VERSION.SDK_INT >= 26 ? getNotificationBuilderAPI26(context) :
+          new Notification.Builder(context);
+
+      notificationBuilder
+        .setPriority(Notification.PRIORITY_MIN)
+        .setShowWhen(false)
+        .setContentTitle(String.valueOf(currentStepsCounted) + " steps")
+        .setContentIntent(PendingIntent.getActivity(context, 0, new Intent(context, org.apache.cordova.CordovaActivity.class),
+          PendingIntent.FLAG_UPDATE_CURRENT))
+        .setSmallIcon(context.getApplicationInfo().icon)
+        .setOngoing(true);
+
+      return notificationBuilder.build();
+    }
+
+    @RequiresApi(api = Build.VERSION_CODES.O)
+    private static Notification.Builder getNotificationBuilderAPI26(final Context context) {
+      NotificationManager manager =
+        (NotificationManager) context.getSystemService(Context.NOTIFICATION_SERVICE);
+      NotificationChannel channel =
+        new NotificationChannel(NOTIFICATION_CHANNEL_ID, NOTIFICATION_CHANNEL_ID,
+          NotificationManager.IMPORTANCE_NONE);
+      channel.setImportance(NotificationManager.IMPORTANCE_MIN); // ignored by Android O ...
+      channel.enableLights(false);
+      channel.enableVibration(false);
+      channel.setBypassDnd(false);
+      channel.setSound(null, null);
+      manager.createNotificationChannel(channel);
+      Notification.Builder builder = new Notification.Builder(context, NOTIFICATION_CHANNEL_ID);
+      return builder;
     }
 }
